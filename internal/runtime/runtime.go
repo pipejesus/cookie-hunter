@@ -171,10 +171,23 @@ func cookieNames(cookies []*network.Cookie) []string {
 func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) []report.Check {
 	var checks []report.Check
 
-	// R1 — zero requests to tracker hosts
-	trackerHits := matching(res.PreRequests, cfg, true)
-	checks = append(checks, report.New("R1", len(trackerHits) == 0,
-		fmt.Sprintf("tracker requests pre-consent: %d %s", len(trackerHits), sample(trackerHits))))
+	// R1 — zero requests to tracker hosts. Requests carrying gcs=G100 are
+	// Consent Mode v2 denied-state pings (cookieless by design) — Google tags
+	// send those on purpose when consent is denied, so they are not leakage;
+	// same semantics R2 applies to GA hits.
+	var trackerHits, deniedPings []string
+	for _, r := range matching(res.PreRequests, cfg, true) {
+		if strings.Contains(r, "gcs=G100") {
+			deniedPings = append(deniedPings, r)
+		} else {
+			trackerHits = append(trackerHits, r)
+		}
+	}
+	r1detail := fmt.Sprintf("tracker requests pre-consent: %d %s", len(trackerHits), sample(trackerHits))
+	if len(deniedPings) > 0 {
+		r1detail += fmt.Sprintf(" (+%d consent-mode denied pings, gcs=G100 — not leakage)", len(deniedPings))
+	}
+	checks = append(checks, report.New("R1", len(trackerHits) == 0, r1detail))
 
 	// R2 — Consent Mode denied on every GA hit
 	var gaBad, gaAll []string
