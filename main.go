@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -28,13 +29,20 @@ const (
 	browserWorkers = 3
 )
 
+//go:embed skill/SKILL.md
+var skillMD []byte
+
 func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "init" {
 		initConfig(os.Args[2:])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "install-skill" {
+		installSkill(os.Args[2:])
+		return
+	}
 	if len(os.Args) < 2 || os.Args[1] != "scan" {
-		fmt.Fprintln(os.Stderr, "usage: cookie-hunter scan [flags] <url>...   |   cookie-hunter init <url>")
+		fmt.Fprintln(os.Stderr, "usage: cookie-hunter scan [flags] <url>...   |   cookie-hunter init <url>   |   cookie-hunter install-skill")
 		os.Exit(2)
 	}
 
@@ -113,6 +121,34 @@ func main() {
 	if run.HasFailures() {
 		os.Exit(1)
 	}
+}
+
+// installSkill writes the embedded agent skill into the user's skillset so
+// AI agents (Claude Code and compatible) know how to drive cookie-hunter.
+func installSkill(args []string) {
+	fs := flag.NewFlagSet("install-skill", flag.ExitOnError)
+	dir := fs.String("dir", "", "skills directory (default ~/.claude/skills)")
+	fs.Parse(args)
+
+	if *dir == "" {
+		home, err := os.UserHomeDir()
+		fatal(err)
+		*dir = filepath.Join(home, ".claude", "skills")
+	}
+	dest := filepath.Join(*dir, "cookie-hunter", "SKILL.md")
+	prev, _ := os.ReadFile(dest)
+	fatal(os.MkdirAll(filepath.Dir(dest), 0o755))
+	fatal(os.WriteFile(dest, skillMD, 0o644))
+
+	switch {
+	case prev == nil:
+		fmt.Println("installed skill:", dest)
+	case string(prev) == string(skillMD):
+		fmt.Println("skill already up to date:", dest)
+	default:
+		fmt.Println("updated skill:", dest)
+	}
+	fmt.Println("agents pick it up in their next session")
 }
 
 // initConfig fetches a page and writes <domain>.json with the mechanically

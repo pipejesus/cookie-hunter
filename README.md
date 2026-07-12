@@ -8,6 +8,7 @@ truth for every check ID (S1–S7, C1–C4, R1–R3, D1–D3, K1, A1–A4) and i
 
 ```
 cookie-hunter init https://example.com                  # generate example.com.json (cbid, region, allowlist)
+cookie-hunter install-skill                             # teach AI agents (Claude Code) to drive this tool
 cookie-hunter scan https://example.com/page/            # single URL
 cookie-hunter scan url1 url2 url3                       # multiple URLs
 cookie-hunter scan -sitemap https://example.com/sitemap_index.xml   # Yoast sitemap mode
@@ -45,6 +46,14 @@ check fails on any URL.
 
 Snapshots (raw HTML, configuration.js, network log, results.json) land in the run's `-out` dir;
 diffing two run dirs is the before/after report.
+
+## Agent skill
+
+`skill/SKILL.md` is a guide for AI coding agents: workflow, a check-ID reference with
+"what to tell the user on FAIL", and hard rules (notably: never `-consent` against
+production without explicit user approval). It is embedded in the binary at build time;
+`cookie-hunter install-skill` writes it to `~/.claude/skills/cookie-hunter/SKILL.md`
+(override with `-dir`), so any released binary can set up an agent's environment.
 
 ## Build & test
 
