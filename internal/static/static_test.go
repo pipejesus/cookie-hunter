@@ -66,7 +66,8 @@ func TestLivePageFailures(t *testing.T) {
 func TestNoCookiebotAtAll(t *testing.T) {
 	c := cfg()
 	checks := Run([]byte("<html><body><p>hello</p></body></html>"), "https://tvs.example/", c)
-	if checks[0].ID != "S1" || checks[0].Status != report.Fail {
-		t.Errorf("S1 on cookiebot-less page = %+v, want fail", checks[0])
+	// GTM-only install is a structural weakness, not observed leakage: WARN, not FAIL
+	if checks[0].ID != "S1" || checks[0].Status != report.Warn {
+		t.Errorf("S1 on cookiebot-less page = %+v, want warn", checks[0])
 	}
 }

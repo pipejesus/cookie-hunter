@@ -193,15 +193,17 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 			fmt.Sprintf("GA hits without gcs=G100: %d of %d %s", len(gaBad), len(gaAll), sample(gaBad))))
 	}
 
-	// R3 — the CMP itself must load (blocking everything incl. uc.js is also a failure)
-	cmpLoaded := false
+	// R3 — the CMP itself must load (blocking everything incl. uc.js is also a
+	// failure). Region-agnostic on purpose: whether it's the RIGHT region host
+	// is S1's job; here we only ask "did a CMP arrive at all".
+	cmpHit := ""
 	for _, r := range res.PreRequests {
-		if strings.Contains(r, "cookiebot."+cfg.Region+"/") || strings.Contains(r, ".cookiebot.com/") {
-			cmpLoaded = true
+		if strings.Contains(r, ".cookiebot.") || strings.Contains(strings.ToLower(r), "usercentrics") {
+			cmpHit = r
 			break
 		}
 	}
-	checks = append(checks, report.New("R3", cmpLoaded, fmt.Sprintf("uc.js/CMP loaded: %v", cmpLoaded)))
+	checks = append(checks, report.New("R3", cmpHit != "", "uc.js/CMP loaded: "+firstOr(cmpHit, "no request to any cookiebot/usercentrics host")))
 
 	// D1 — no consent recorded
 	d1 := res.Pre.HasCookiebot && res.Pre.ConsentMethod == nil && !res.Pre.Statistics && !res.Pre.Marketing
@@ -293,6 +295,13 @@ func matching(requests []string, cfg *config.Site, trackerOnly bool) []string {
 		}
 	}
 	return out
+}
+
+func firstOr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 func strOrNull(s *string) string {

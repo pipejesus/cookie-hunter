@@ -15,6 +15,7 @@ type Status string
 const (
 	Pass Status = "pass"
 	Fail Status = "fail"
+	Warn Status = "warn" // a structural weakness, not observed leakage; doesn't affect the exit code
 	Skip Status = "skip"
 )
 
@@ -34,6 +35,10 @@ func New(id string, ok bool, detail string) Check {
 
 func Skipped(id, why string) Check {
 	return Check{ID: id, Status: Skip, Detail: why}
+}
+
+func Warning(id, detail string) Check {
+	return Check{ID: id, Status: Warn, Detail: detail}
 }
 
 type URLReport struct {
@@ -90,11 +95,11 @@ func (r *Run) WriteHuman(w io.Writer) {
 		}
 		writeChecks(w, u.Checks, color)
 	}
-	pass, fail, skip := r.tally()
-	fmt.Fprintf(w, "\n%d pass, %d fail, %d skip\n", pass, fail, skip)
+	pass, fail, warn, skip := r.tally()
+	fmt.Fprintf(w, "\n%d pass, %d fail, %d warn, %d skip\n", pass, fail, warn, skip)
 }
 
-func (r *Run) tally() (pass, fail, skip int) {
+func (r *Run) tally() (pass, fail, warn, skip int) {
 	count := func(cs []Check) {
 		for _, c := range cs {
 			switch c.Status {
@@ -102,6 +107,8 @@ func (r *Run) tally() (pass, fail, skip int) {
 				pass++
 			case Fail:
 				fail++
+			case Warn:
+				warn++
 			default:
 				skip++
 			}
@@ -122,8 +129,10 @@ func writeChecks(w io.Writer, checks []Check, color bool) {
 			label = paint("PASS", "32", color)
 		case Fail:
 			label = paint("FAIL", "31", color)
+		case Warn:
+			label = paint("WARN", "33", color)
 		default:
-			label = paint("SKIP", "33", color)
+			label = paint("SKIP", "90", color)
 		}
 		fmt.Fprintf(w, "  %s %-3s %s\n", label, c.ID, c.Detail)
 	}

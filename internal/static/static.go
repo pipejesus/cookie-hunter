@@ -86,7 +86,9 @@ func walk(n *html.Node, fn func(*html.Node)) {
 func s1(raw []byte, scripts []element, cfg *config.Site) report.Check {
 	count := bytes.Count(bytes.ToLower(raw), []byte("cookiebot"))
 	if count == 0 {
-		return report.New("S1", false, "no 'cookiebot' in source — GTM-only install: banner late, no auto-block")
+		// Structural weakness, not observed leakage — the runtime checks (R/D/K)
+		// are the truth-tellers for whether blocking actually works.
+		return report.Warning("S1", "no 'cookiebot' in source — GTM-only install: banner late, no auto-block possible")
 	}
 	for _, s := range scripts {
 		src := s.attrs["src"]
