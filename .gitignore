@@ -1,3 +1,4 @@
 /cookie-hunter
 snapshots/
 *.log
+dist/
