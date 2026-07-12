@@ -1,8 +1,27 @@
 # Cookie Hunter
 
 Console app that verifies a Cookiebot-equipped site actually blocks trackers before consent.
-Implements the check catalog from `../claude-check-process.md` — that file is the source of
-truth for every check ID (S1–S7, C1–C4, R1–R3, D1–D3, K1, A1–A4) and its pass condition.
+Every check has an ID (S1–S7, C1–C4, R1–R3, D1–D3, K1, A1–A4); the Phases section below
+says what each group covers, and `skill/SKILL.md` explains every ID and what a FAIL means.
+
+## Install
+
+Grab a prebuilt binary from [GitHub Releases](https://github.com/pipejesus/cookie-hunter/releases)
+(static, no dependencies — unzip and run), or build from source with `go build` (needs Go).
+
+The browser phases (2–3) need Chrome or Chromium on `PATH`. Without it you can still
+run `-static-only` scans.
+
+## Quick start
+
+```
+cookie-hunter init https://example.com                      # 1. detect settings → example.com.json
+cookie-hunter scan -config example.com.json https://example.com/   # 2. scan using that config
+```
+
+The scan prints a pass/fail matrix per URL and exits non-zero if any pre-consent check
+failed — ready for CI. You can scan without a config too, but then the checklist checks
+(C1–C4) are skipped and unknown cookies aren't matched against an allowlist.
 
 ## Usage
 
@@ -11,6 +30,7 @@ cookie-hunter init https://example.com                  # generate example.com.j
 cookie-hunter install-skill                             # teach AI agents (Claude Code) to drive this tool
 cookie-hunter scan https://example.com/page/            # single URL
 cookie-hunter scan url1 url2 url3                       # multiple URLs
+cookie-hunter scan -config example.com.json url1        # with site config (recommended)
 cookie-hunter scan -sitemap https://example.com/sitemap_index.xml   # Yoast sitemap mode
 ```
 
