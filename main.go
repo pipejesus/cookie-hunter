@@ -29,8 +29,12 @@ const (
 )
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "init" {
+		initConfig(os.Args[2:])
+		return
+	}
 	if len(os.Args) < 2 || os.Args[1] != "scan" {
-		fmt.Fprintln(os.Stderr, "usage: cookie-hunter scan [flags] <url>...   (see -h)")
+		fmt.Fprintln(os.Stderr, "usage: cookie-hunter scan [flags] <url>...   |   cookie-hunter init <url>")
 		os.Exit(2)
 	}
 
@@ -109,6 +113,37 @@ func main() {
 	if run.HasFailures() {
 		os.Exit(1)
 	}
+}
+
+// initConfig fetches a page and writes <domain>.json with the mechanically
+// detectable settings (domain, cbid, region, known-essential cookie allowlist).
+func initConfig(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: cookie-hunter init <url>")
+		os.Exit(2)
+	}
+	url := args[0]
+	raw, status, err := web.Get(url, config.Defaults().UserAgent)
+	fatal(err)
+	if status != 200 {
+		fatal(fmt.Errorf("%s: HTTP %d", url, status))
+	}
+	site := config.Detect(raw, url)
+	path := site.Domain + ".json"
+	if _, err := os.Stat(path); err == nil {
+		fatal(fmt.Errorf("%s already exists — edit it instead, or remove it first", path))
+	}
+	fatal(writeJSONFile(path, site))
+
+	fmt.Printf("wrote %s\n  domain: %s\n  region: %s\n", path, site.Domain, site.Region)
+	if site.CBID == "" {
+		fmt.Println("  cbid:   NOT FOUND in page source (GTM-only install?) — paste it in manually to enable checklist checks")
+	} else {
+		fmt.Println("  cbid:   found and saved")
+	}
+	fmt.Println("  cookieAllowlist seeded with well-known session essentials — review it;")
+	fmt.Println("  any other cookie the site sets pre-consent will (deliberately) fail K1.")
+	fmt.Printf("\nrun: cookie-hunter scan -config %s %s\n", path, url)
 }
 
 func scanStatic(cfg *config.Site, url, outDir string) report.URLReport {

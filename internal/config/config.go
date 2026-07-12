@@ -12,14 +12,14 @@ import (
 )
 
 type Site struct {
-	Domain          string   `json:"domain"`
-	CBID            string   `json:"cbid"`
-	Region          string   `json:"region"` // "com" or "eu" — picks consent.cookiebot.<region>
-	TrackerHosts    []string `json:"trackerHosts"`
-	EmbedHosts      []string `json:"embedHosts"`
-	CookieAllowlist []string `json:"cookieAllowlist"` // cookie names allowed pre-consent
-	ImageAllowHosts []string `json:"imageAllowHosts"` // third-party img hosts that are fine (CDNs)
-	UserAgent       string   `json:"userAgent"`
+	Domain          string   `json:"domain,omitempty"`
+	CBID            string   `json:"cbid,omitempty"`
+	Region          string   `json:"region,omitempty"` // "com" or "eu" — picks consent.cookiebot.<region>
+	TrackerHosts    []string `json:"trackerHosts,omitempty"`
+	EmbedHosts      []string `json:"embedHosts,omitempty"`
+	CookieAllowlist []string `json:"cookieAllowlist,omitempty"` // cookie names allowed pre-consent
+	ImageAllowHosts []string `json:"imageAllowHosts,omitempty"` // third-party img hosts that are fine (CDNs)
+	UserAgent       string   `json:"userAgent,omitempty"`
 
 	trackerRe, embedRe, imageAllowRe *regexp.Regexp
 }

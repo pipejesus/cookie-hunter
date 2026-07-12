@@ -7,6 +7,7 @@ truth for every check ID (S1–S7, C1–C4, R1–R3, D1–D3, K1, A1–A4) and i
 ## Usage
 
 ```
+cookie-hunter init https://example.com                  # generate example.com.json (cbid, region, allowlist)
 cookie-hunter scan https://example.com/page/            # single URL
 cookie-hunter scan url1 url2 url3                       # multiple URLs
 cookie-hunter scan -sitemap https://example.com/sitemap_index.xml   # Yoast sitemap mode
@@ -24,6 +25,12 @@ Flags:
 -json               machine-readable output instead of the human matrix
 -out dir            snapshot dir (default snapshots/<domain>/<timestamp>/)
 ```
+
+`init` detects the mechanical settings from the page source (domain, cbid from `data-cbid`
+or the uc.js query, region from the consent host) and seeds the cookie allowlist with
+well-known session essentials. Extending the allowlist beyond that is a deliberate human
+decision: unknown pre-consent cookies fail K1 until you review and allowlist them.
+Keep configs with cbids out of shared repos.
 
 Default run = phases 0 (static HTML), 1 (auto-block checklist), 2 (headless Chrome, pre-consent).
 Phase 3 (post-consent restore) only with `-consent`. Exit code is non-zero when any pre-consent
