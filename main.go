@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -123,32 +124,124 @@ func main() {
 	}
 }
 
-// installSkill writes the embedded agent skill into the user's skillset so
-// AI agents (Claude Code and compatible) know how to drive cookie-hunter.
+// installSkill teaches AI coding agents to drive cookie-hunter. Claude Code
+// gets a skill file; Codex and opencode get a managed block in their global
+// AGENTS.md. Default: auto-detect which agents exist on this machine.
 func installSkill(args []string) {
 	fs := flag.NewFlagSet("install-skill", flag.ExitOnError)
-	dir := fs.String("dir", "", "skills directory (default ~/.claude/skills)")
+	agent := fs.String("agent", "auto", "claude | codex | opencode | all | auto (install for agents found on this machine)")
+	dir := fs.String("dir", "", "override: Claude-style skills directory to install into")
 	fs.Parse(args)
 
-	if *dir == "" {
-		home, err := os.UserHomeDir()
-		fatal(err)
-		*dir = filepath.Join(home, ".claude", "skills")
+	home, err := os.UserHomeDir()
+	fatal(err)
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	if xdg == "" {
+		xdg = filepath.Join(home, ".config")
 	}
-	dest := filepath.Join(*dir, "cookie-hunter", "SKILL.md")
+
+	if *dir != "" {
+		installSkillFile(filepath.Join(*dir, "cookie-hunter", "SKILL.md"))
+		return
+	}
+
+	type target struct {
+		name    string
+		baseDir string // presence of this dir = agent is installed
+		install func()
+	}
+	targets := []target{
+		{"claude", filepath.Join(home, ".claude"), func() {
+			installSkillFile(filepath.Join(home, ".claude", "skills", "cookie-hunter", "SKILL.md"))
+		}},
+		{"codex", filepath.Join(home, ".codex"), func() {
+			installAgentsBlock("codex", filepath.Join(home, ".codex", "AGENTS.md"))
+		}},
+		{"opencode", filepath.Join(xdg, "opencode"), func() {
+			installAgentsBlock("opencode", filepath.Join(xdg, "opencode", "AGENTS.md"))
+		}},
+	}
+
+	installed := 0
+	for _, t := range targets {
+		switch *agent {
+		case "auto":
+			if _, err := os.Stat(t.baseDir); err != nil {
+				continue // agent not present on this machine
+			}
+		case "all", t.name:
+		default:
+			continue
+		}
+		t.install()
+		installed++
+	}
+	if installed == 0 {
+		fatal(fmt.Errorf("no agent found/selected (-agent %s) — use -agent claude|codex|opencode|all", *agent))
+	}
+	fmt.Println("agents pick it up in their next session")
+}
+
+func installSkillFile(dest string) {
 	prev, _ := os.ReadFile(dest)
 	fatal(os.MkdirAll(filepath.Dir(dest), 0o755))
 	fatal(os.WriteFile(dest, skillMD, 0o644))
+	fmt.Printf("claude: %s skill %s\n", verb(prev, skillMD), dest)
+}
 
+const (
+	blockBegin = "<!-- BEGIN cookie-hunter skill (managed by `cookie-hunter install-skill`) -->"
+	blockEnd   = "<!-- END cookie-hunter skill -->"
+)
+
+// installAgentsBlock upserts a marker-delimited section into an AGENTS.md so
+// re-installs update in place and never touch the user's own content.
+func installAgentsBlock(agent, dest string) {
+	block := blockBegin + "\n" + string(stripFrontmatter(skillMD)) + blockEnd + "\n"
+	prev, _ := os.ReadFile(dest)
+	next := upsertBlock(string(prev), block)
+	fatal(os.MkdirAll(filepath.Dir(dest), 0o755))
+	fatal(os.WriteFile(dest, []byte(next), 0o644))
+	fmt.Printf("%s: %s block in %s\n", agent, verb(prev, []byte(next)), dest)
+}
+
+func upsertBlock(existing, block string) string {
+	begin := strings.Index(existing, blockBegin)
+	end := strings.Index(existing, blockEnd)
+	if begin >= 0 && end > begin {
+		return existing[:begin] + block + existing[end+len(blockEnd)+1:]
+	}
+	if existing != "" && !strings.HasSuffix(existing, "\n") {
+		existing += "\n"
+	}
+	if existing != "" {
+		existing += "\n"
+	}
+	return existing + block
+}
+
+// stripFrontmatter removes the YAML frontmatter (Claude-skill specific) for
+// AGENTS.md targets, which want plain markdown.
+func stripFrontmatter(md []byte) []byte {
+	s := string(md)
+	if !strings.HasPrefix(s, "---\n") {
+		return md
+	}
+	if i := strings.Index(s[4:], "\n---\n"); i >= 0 {
+		return []byte(strings.TrimLeft(s[4+i+5:], "\n"))
+	}
+	return md
+}
+
+func verb(prev, next []byte) string {
 	switch {
 	case prev == nil:
-		fmt.Println("installed skill:", dest)
-	case string(prev) == string(skillMD):
-		fmt.Println("skill already up to date:", dest)
+		return "installed"
+	case string(prev) == string(next):
+		return "already up-to-date"
 	default:
-		fmt.Println("updated skill:", dest)
+		return "updated"
 	}
-	fmt.Println("agents pick it up in their next session")
 }
 
 // initConfig fetches a page and writes <domain>.json with the mechanically

@@ -52,8 +52,15 @@ diffing two run dirs is the before/after report.
 `skill/SKILL.md` is a guide for AI coding agents: workflow, a check-ID reference with
 "what to tell the user on FAIL", and hard rules (notably: never `-consent` against
 production without explicit user approval). It is embedded in the binary at build time;
-`cookie-hunter install-skill` writes it to `~/.claude/skills/cookie-hunter/SKILL.md`
-(override with `-dir`), so any released binary can set up an agent's environment.
+`cookie-hunter install-skill` auto-detects the agents on the machine and installs for each:
+
+- **Claude Code** → `~/.claude/skills/cookie-hunter/SKILL.md`
+- **Codex** → managed block in `~/.codex/AGENTS.md`
+- **opencode** → managed block in `~/.config/opencode/AGENTS.md`
+
+AGENTS.md blocks are marker-delimited: re-installs update them in place and never touch
+surrounding content. Force a target with `-agent claude|codex|opencode|all`, or install
+the Claude-style skill to a custom skills directory with `-dir`.
 
 ## Build & test
 
