@@ -17,6 +17,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      # Ubuntu 24.04 runners: AppArmor blocks unprivileged user namespaces,
+      # which kills Chrome's sandbox — re-allow them so the runtime test runs.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: go test ./...
       - uses: goreleaser/goreleaser-action@v6
         with:
