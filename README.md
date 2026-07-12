@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="440" alt="Cookie Hunter — a googly-eyed monster detective inspecting a cookie">
+</p>
+
 # Cookie Hunter
 
 Console app that verifies a Cookiebot-equipped site actually blocks trackers before consent.
