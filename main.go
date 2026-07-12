@@ -40,9 +40,11 @@ func main() {
 	limit := fs.Int("limit", 10, "URLs sampled per sub-sitemap")
 	staticOnly := fs.Bool("static-only", false, "phases 0–1 only, no browser")
 	consent := fs.Bool("consent", false, "phase 3: submit REAL consent (logged in the Cookiebot account!)")
+	headed := fs.Bool("headed", false, "show the Chrome window instead of running headless")
 	jsonOut := fs.Bool("json", false, "machine-readable output")
 	outDir := fs.String("out", "", "snapshot dir (default snapshots/<domain>/<timestamp>)")
 	fs.Parse(os.Args[2:])
+	runtime.Headed = *headed
 
 	cfg, err := config.Load(*configPath)
 	fatal(err)

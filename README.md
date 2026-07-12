@@ -20,6 +20,7 @@ Flags:
 -limit N            URLs sampled per sub-sitemap (default 10)
 -static-only        phases 0–1 only (no browser) — cheap, safe for hundreds of URLs
 -consent            enable phase 3: submits a REAL consent (logged in the client's Cookiebot account!)
+-headed             show the Chrome window (default: headless — same real Chrome, just not painted)
 -json               machine-readable output instead of the human matrix
 -out dir            snapshot dir (default snapshots/<domain>/<timestamp>/)
 ```

@@ -73,14 +73,21 @@ func probeJS(cfg *config.Site) string {
 }
 
 // Scan drives one URL in a fresh browser profile.
+// Headed shows the browser window (default: headless). Package-level because
+// it's a global run mode, not a per-site setting.
+var Headed bool
+
 func Scan(parent context.Context, cfg *config.Site, pageURL string, withConsent bool) (*Result, error) {
 	ctx, cancel := context.WithTimeout(parent, 3*time.Minute)
 	defer cancel()
 
 	// Fresh profile per URL (P8). chromedp creates a temp user-data-dir when
 	// none is given and removes it on cancel.
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx,
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.UserAgent(cfg.UserAgent))...)
+	opts := append(chromedp.DefaultExecAllocatorOptions[:], chromedp.UserAgent(cfg.UserAgent))
+	if Headed {
+		opts = append(opts, chromedp.Flag("headless", false))
+	}
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancelAlloc()
 	// quiet chromedp's "unhandled node event" noise on newer Chrome builds
 	tabCtx, cancelTab := chromedp.NewContext(allocCtx,
