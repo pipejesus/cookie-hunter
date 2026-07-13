@@ -21,6 +21,21 @@ var validConsentValues = map[string]bool{
 	"preferences": true, "statistics": true, "marketing": true, "ignore": true,
 }
 
+// uc.js restores data-src and data-cookieblock-src interchangeably, provided
+// data-cookieconsent is present (verified against live uc.js: it tests
+// hasAttribute("data-cookieconsent") && (data-src || data-cookieblock-src)).
+// The official Cookiebot WordPress plugin gates with data-src, hand-written markup
+// usually with data-cookieblock-src — both must count as gated or the checks are
+// blind to half the ecosystem.
+func gatedSrc(attrs map[string]string) (string, bool) {
+	for _, k := range []string{"data-cookieblock-src", "data-src"} {
+		if v, ok := attrs[k]; ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
 // Heuristic for hostile inline scripts (pitfall P6): vendors like ustat/openstat
 // assemble their URL character-by-character, so never grep for names — detect the
 // injection behavior instead.
@@ -45,7 +60,18 @@ func Run(raw []byte, pageURL string, cfg *config.Site) []report.Check {
 		case "iframe", "script", "img":
 			el := element{tag: n.Data, attrs: map[string]string{}}
 			for _, a := range n.Attr {
-				el.attrs[strings.ToLower(a.Key)] = a.Val
+				// FIRST occurrence wins — duplicate attributes are a parse error and
+				// the browser keeps the first (HTML spec, tree construction). x/net/html
+				// hands us both, so a naive last-wins map inverts browser behaviour and
+				// the check lies in the SAFE direction: a tag written
+				//   <script type="text/javascript" src=… type="text/plain" data-cookieconsent=…>
+				// still executes, but last-wins would read type="text/plain" and call it gated.
+				// Real bug, seen in the wild (tvs.pl, 2026-07-13).
+				k := strings.ToLower(a.Key)
+				if _, seen := el.attrs[k]; seen {
+					continue
+				}
+				el.attrs[k] = a.Val
 			}
 			if n.Data == "script" && n.FirstChild != nil {
 				el.text = n.FirstChild.Data
@@ -140,18 +166,21 @@ func s3(iframes []element, cfg *config.Site) report.Check {
 func s4(iframes []element) report.Check {
 	gated, bad := 0, []string{}
 	for _, f := range iframes {
-		if _, ok := f.attrs["data-cookieblock-src"]; !ok {
+		src, ok := gatedSrc(f.attrs)
+		if !ok {
 			continue
 		}
 		gated++
 		consent, ok := f.attrs["data-cookieconsent"]
 		if !ok {
-			bad = append(bad, f.attrs["data-cookieblock-src"]+" (missing data-cookieconsent)")
+			// Without data-cookieconsent, uc.js ignores the element entirely: the embed
+			// is not gated, it is simply broken — it will never be restored.
+			bad = append(bad, src+" (missing data-cookieconsent)")
 			continue
 		}
 		for _, v := range strings.Split(consent, ",") {
 			if !validConsentValues[strings.TrimSpace(v)] {
-				bad = append(bad, fmt.Sprintf("%s (invalid value %q)", f.attrs["data-cookieblock-src"], v))
+				bad = append(bad, fmt.Sprintf("%s (invalid value %q)", src, v))
 			}
 		}
 	}
@@ -159,16 +188,36 @@ func s4(iframes []element) report.Check {
 		fmt.Sprintf("%d gated iframes, %d invalid %s", gated, len(bad), sample(bad)))
 }
 
-// S5 — external scripts matching embed/tracker hosts must be text/plain-gated.
+// S5 — external scripts matching embed/tracker hosts must be gated.
+//
+// Two gating styles are legitimate and both must be accepted:
+//   - hand-written / theme filter: src stays, type="text/plain" + data-cookieconsent
+//   - Cookiebot WP plugin:         src moves to data-src + data-cookieconsent (no type change)
+//
+// A script with a live src and no text/plain gate executes, full stop — including
+// when a second type="text/plain" was appended after an existing type (the browser
+// keeps the first attribute; see the first-wins note in Run).
 func s5(scripts []element, cfg *config.Site) report.Check {
 	var offenders []string
 	for _, s := range scripts {
-		src := s.attrs["src"]
+		liveSrc := s.attrs["src"]
+		parked, isParked := gatedSrc(s.attrs)
+
+		src := liveSrc
+		if src == "" {
+			src = parked
+		}
 		if src == "" || (!cfg.EmbedRe().MatchString(src) && !cfg.TrackerRe().MatchString(src)) {
 			continue
 		}
+
 		_, hasConsent := s.attrs["data-cookieconsent"]
-		if s.attrs["type"] != "text/plain" || !hasConsent {
+		switch {
+		case liveSrc == "" && isParked && hasConsent:
+			// src parked in data-src: the browser never fetches it. Gated.
+		case liveSrc != "" && s.attrs["type"] == "text/plain" && hasConsent:
+			// Neutralised MIME type. Gated.
+		default:
 			offenders = append(offenders, src)
 		}
 	}

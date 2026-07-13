@@ -64,9 +64,9 @@ func probeJS(cfg *config.Site) string {
 	    statistics: !!(c && c.statistics),
 	    marketing: !!(c && c.marketing),
 	    bannerVisible: !!document.querySelector('#CybotCookiebotDialog'),
-	    gatedScripts: document.querySelectorAll('script[type="text/plain"]').length,
-	    gatedIframes: document.querySelectorAll('iframe[data-cookieblock-src]').length,
-	    unrestoredIframes: document.querySelectorAll('iframe[data-cookieblock-src]:not([src])').length,
+	    gatedScripts: document.querySelectorAll('script[type="text/plain"], script[data-src][data-cookieconsent]').length,
+	    gatedIframes: document.querySelectorAll('iframe[data-cookieblock-src], iframe[data-src]').length,
+	    unrestoredIframes: document.querySelectorAll('iframe[data-cookieblock-src]:not([src]), iframe[data-src]:not([src])').length,
 	    liveEmbedIframes: [...document.querySelectorAll('iframe[src]')].map(f => f.src).filter(s => re.test(s)),
 	  };
 	})()`, strings.Join(cfg.EmbedHosts, "|"))

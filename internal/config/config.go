@@ -30,12 +30,17 @@ func Defaults() *Site {
 		TrackerHosts: []string{
 			`youtube\.com`, `ytimg`, `platform\.twitter`, `syndication\.(x|twitter)\.com`,
 			`tiktok`, `ttwstatic`, `tiktokcdn`, `spotify`, `ustat\.info`, `openstat\.eu`,
-			`doubleclick`, `googlesyndication`, `imasdk`,
+			`doubleclick`, `googlesyndication`, `imasdk`, `onnetwork\.tv`,
 		},
+		// Name the REGISTRABLE domain, not one subdomain: embeds move hosts freely
+		// (open. vs creators.spotify.com, player.vimeo.com vs vimeo.com). Pinning a
+		// subdomain makes the check silently miss the sibling — creators.spotify.com
+		// slipped past `open\.spotify\.com` on tvs.pl for weeks.
 		EmbedHosts: []string{
-			`youtube\.com`, `youtu\.be`, `youtube-nocookie\.com`, `player\.vimeo\.com`,
-			`platform\.twitter\.com`, `tiktok\.com`, `open\.spotify\.com`,
-			`facebook\.com/plugins`, `soundcloud\.com`,
+			`youtube\.com`, `youtu\.be`, `youtube-nocookie\.com`, `vimeo\.com`,
+			`dailymotion\.com`, `twitter\.com`, `x\.com`, `facebook\.com/plugins`,
+			`instagram\.com`, `tiktok\.com`, `spotify\.com`, `soundcloud\.com`,
+			`google\.com/maps`, `onnetwork\.tv`,
 		},
 		CookieAllowlist: []string{"CookieConsent"},
 		ImageAllowHosts: []string{`gravatar\.com`, `\.wp\.com`},

@@ -87,10 +87,22 @@ func Run(raw []byte, status int, cfg *config.Site, prevRaw []byte) []report.Chec
 		report.New("C1", true, fmt.Sprintf("checklist fetched, %d entries", len(entries))),
 	}
 
-	// C2 — known trackers marked "don't block" (cat 1/5 only)
+	// C2 — entries the auto-blocker will NOT block (cat 1 Necessary / cat 5 Unclassified).
+	// Two ways in: a host we recognise as a tracker, or ANY third-party entry parked in
+	// Necessary — "third-party marked Necessary" is suspicious whether or not we know the
+	// vendor, and TrackerHosts can never enumerate the long tail (tvs.pl: a partner livecam
+	// at cat:[1] sailed past the tracker list entirely).
 	var unblocked []string
 	for _, e := range entries {
-		if e.URL != "" && cfg.TrackerRe().MatchString(e.URL) && !e.blocked() {
+		if e.URL == "" || e.blocked() {
+			continue
+		}
+		known := cfg.TrackerRe().MatchString(e.URL)
+		thirdParty := false
+		if u, err := url.Parse(e.URL); err == nil {
+			thirdParty = !cfg.FirstParty(u.Hostname())
+		}
+		if known || thirdParty {
 			unblocked = append(unblocked, fmt.Sprintf("%s cat:%v", e.URL, e.Cats))
 		}
 	}
