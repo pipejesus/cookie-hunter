@@ -303,7 +303,7 @@ func matching(requests []string, cfg *config.Site, trackerOnly bool) []string {
 		if strings.Contains(r, ".cookiebot.") {
 			continue
 		}
-		if cfg.TrackerRe().MatchString(r) || (!trackerOnly && cfg.EmbedRe().MatchString(r)) {
+		if cfg.IsTracker(r) || (!trackerOnly && cfg.EmbedRe().MatchString(r)) {
 			out = append(out, r)
 		}
 	}

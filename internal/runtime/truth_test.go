@@ -131,29 +131,32 @@ func TestRequestLeakTruth(t *testing.T) {
 		t.Skip("no Chrome/Chromium on PATH")
 	}
 
+	// The page is served from 127.0.0.1 and the "tracker" from localhost — the
+	// same server reached under a second hostname, which is what lets us treat
+	// one host as third-party and the other as the site itself.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// The URL matcher tests the whole URL string, so a local path carrying a
-		// tracker's domain name reproduces a real hit exactly.
-		fmt.Fprint(w, `<!DOCTYPE html><html><body>
-		<img src="/google-analytics.com/g/collect?v=2&tid=G-TEST&gcs=G100">
-		<img src="/google-analytics.com/g/collect?v=2&tid=G-TEST&cid=123">
-		<img src="/blog/tiktok-marketing-for-studios/cover.jpg">
-		</body></html>`)
-	})
-	mux.HandleFunc("/google-analytics.com/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/gif")
-	})
-	mux.HandleFunc("/blog/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/jpeg")
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
+	port := srv.URL[strings.LastIndex(srv.URL, ":")+1:]
+	tracker := "http://localhost:" + port
+	mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<!DOCTYPE html><html><body>
+		<img src="%s/google-analytics.com/g/collect?v=2&tid=G-TEST&gcs=G100">
+		<img src="%s/google-analytics.com/g/collect?v=2&tid=G-TEST&cid=123">
+		<img src="/blog/tiktok-marketing-for-studios/cover.jpg">
+		</body></html>`, tracker, tracker)
+	})
+
 	cfg := config.Defaults()
 	cfg.Domain = "127.0.0.1"
+	cfg.TrackerHosts = append(append([]string{}, cfg.TrackerHosts...), `localhost`)
 
-	res, err := Scan(context.Background(), cfg, srv.URL, false)
+	res, err := Scan(context.Background(), cfg, srv.URL+"/page", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,14 +184,12 @@ func TestRequestLeakTruth(t *testing.T) {
 		t.Errorf("CLAIM FAILED: R2 = %s | %s, want fail '1 of 2'", r2.Status, r2.Detail)
 	}
 
-	// LIMIT — TrackerHosts are matched against the WHOLE URL, and several
-	// entries are bare words (`tiktok`, `spotify`). An ordinary article path
-	// therefore reads as a tracker request.
+	// CLAIM — a bare-word TrackerHost (`tiktok`) must match a HOST, never a
+	// path. The site's own article image used to be counted as a tracker
+	// request because the pattern was tested against the whole URL.
 	if itemsContain(r1, "tiktok-marketing") {
-		t.Log("LIMIT CONFIRMED: /blog/tiktok-marketing-for-studios/cover.jpg counted as a tracker " +
-			"request — bare-word TrackerHosts match the path, not just the host.")
-	} else {
-		t.Log("NOTE: the article path did not match; the bare-word entries may have been tightened")
+		t.Errorf("CLAIM FAILED: the site's own /blog/tiktok-marketing-for-studios/cover.jpg "+
+			"was counted as a tracker request: %v", r1.Items)
 	}
 }
 
