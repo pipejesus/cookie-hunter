@@ -98,12 +98,23 @@ func Scan(parent context.Context, cfg *config.Site, pageURL string, withConsent 
 	res := &Result{}
 	var mu sync.Mutex
 	var requests []string
+	var docStatus int64
 	// Listener attached before navigation so nothing is missed.
 	chromedp.ListenTarget(tabCtx, func(ev interface{}) {
-		if e, ok := ev.(*network.EventRequestWillBeSent); ok {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
 			mu.Lock()
 			requests = append(requests, e.Request.URL)
 			mu.Unlock()
+		case *network.EventResponseReceived:
+			// The top-level document. Without it there is no way to tell a page
+			// that loaded and behaved from a page that never loaded at all —
+			// see the guard below. Redirects deliver several; the last wins.
+			if e.Type == network.ResourceTypeDocument {
+				mu.Lock()
+				docStatus = e.Response.Status
+				mu.Unlock()
+			}
 		}
 	})
 
@@ -124,8 +135,23 @@ func Scan(parent context.Context, cfg *config.Site, pageURL string, withConsent 
 	}
 	mu.Lock()
 	res.PreRequests = append([]string(nil), requests...)
+	status := docStatus
 	mu.Unlock()
 	res.PreCookies = cookieNames(cookies)
+
+	// A run that observed nothing is not a clean site — it is a failed run, and
+	// the two are indistinguishable downstream: with no requests and an empty
+	// jar, R1 and K1 both PASS and wpaudit reports "no tracking before consent".
+	// lidomovementstudio.pl produced exactly that on 2026-09-22, silently, with
+	// ran=true and no error, on a site that loads Hotjar and an autoplaying
+	// YouTube embed before consent. Telling a client he is compliant because the
+	// test failed is the worst answer this tool can give, so say so instead.
+	if status == 0 {
+		return nil, fmt.Errorf("no document response — page did not load (blocked, timeout or empty reply)")
+	}
+	if status >= 400 {
+		return nil, fmt.Errorf("document responded HTTP %d — nothing was measured", status)
+	}
 
 	res.Checks = preConsentChecks(cfg, res, cookies)
 

@@ -295,6 +295,15 @@ func scanRuntime(cfg *config.Site, url, outDir string, consent bool, rep *report
 	res, err := runtime.Scan(context.Background(), cfg, url, consent)
 	if err != nil {
 		rep.Checks = append(rep.Checks, report.Check{ID: "R0", Status: report.Fail, Detail: "browser run failed: " + err.Error()})
+		// Set the URL's error field too — that is what a machine consumer reads.
+		// The R0 check is visible to a human in the terminal and invisible to
+		// wpaudit, whose adapter looks for `error` and then for R1/R2/K1. After
+		// a failed run none of those exist, so every flag came back false and
+		// the client report said "no tracking before consent". A failed run
+		// must never read as a clean one.
+		if rep.Error == "" {
+			rep.Error = "browser run failed: " + err.Error()
+		}
 		return
 	}
 	writeJSONFile(filepath.Join(outDir, safeName(url)+".runtime.json"), res)
