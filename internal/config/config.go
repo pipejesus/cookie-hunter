@@ -23,6 +23,7 @@ type Site struct {
 
 	trackerRe, embedRe, imageAllowRe *regexp.Regexp
 	trackerHostRe, trackerURLRe      *regexp.Regexp
+	cookieAllowRe                    *regexp.Regexp
 }
 
 func Defaults() *Site {
@@ -162,6 +163,24 @@ func hostOf(rawurl string) (string, bool) {
 		return "", false
 	}
 	return strings.ToLower(u.Hostname()), true
+}
+
+// IsAllowedCookie reports whether a cookie name is allowed before consent.
+//
+// CookieAllowlist entries are PATTERNS matched against the whole name, not
+// literals. A CMP's record routinely carries a site or category id
+// (cookielawinfo-checkbox-necessary, cmplz_banner-status, cookiefirst-consent),
+// so an exact-name list needed a new entry per vendor per variant and lost that
+// race every time: aldent.lublin.pl's `cookieyes-consent`, holding consent:no,
+// was reported as a cookie set before consent. One pattern covers a vendor.
+func (s *Site) IsAllowedCookie(name string) bool {
+	if s.cookieAllowRe == nil {
+		if len(s.CookieAllowlist) == 0 {
+			return false
+		}
+		s.cookieAllowRe = regexp.MustCompile(`(?i)^(` + strings.Join(s.CookieAllowlist, "|") + `)$`)
+	}
+	return s.cookieAllowRe.MatchString(name)
 }
 
 func (s *Site) EmbedRe() *regexp.Regexp {
