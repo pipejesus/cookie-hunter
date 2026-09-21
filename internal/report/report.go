@@ -20,9 +20,10 @@ const (
 )
 
 type Check struct {
-	ID     string `json:"id"`
-	Status Status `json:"status"`
-	Detail string `json:"detail"` // the observed value, not just the verdict
+	ID     string   `json:"id"`
+	Status Status   `json:"status"`
+	Detail string   `json:"detail"`          // the observed value, not just the verdict
+	Items  []string `json:"items,omitempty"` // the COMPLETE list behind Detail (Detail may only sample it)
 }
 
 func New(id string, ok bool, detail string) Check {
@@ -31,6 +32,16 @@ func New(id string, ok bool, detail string) Check {
 		st = Fail
 	}
 	return Check{ID: id, Status: st, Detail: detail}
+}
+
+// NewList is New for a check whose Detail ends in a sampled list. Detail keeps the
+// terminal-friendly sample (first few + "…"), while Items carries the COMPLETE list
+// for machine consumers — the JSON output, e.g. wpaudit — so the display cap never
+// hides data (a truncated cookie list once dropped _fbp, the one that mattered).
+func NewList(id string, ok bool, detail string, items []string) Check {
+	c := New(id, ok, detail)
+	c.Items = items
+	return c
 }
 
 func Skipped(id, why string) Check {

@@ -44,13 +44,13 @@ type probe struct {
 
 // Result carries everything observed; raw parts go into the snapshot dir.
 type Result struct {
-	Checks       []report.Check    `json:"checks"`
-	PreRequests  []string          `json:"preRequests"`
-	PostRequests []string          `json:"postRequests,omitempty"`
-	PreCookies   []string          `json:"preCookies"`  // name@domain
-	PostCookies  []string          `json:"postCookies,omitempty"`
-	Pre          probe             `json:"pre"`
-	Post         *probe            `json:"post,omitempty"`
+	Checks       []report.Check `json:"checks"`
+	PreRequests  []string       `json:"preRequests"`
+	PostRequests []string       `json:"postRequests,omitempty"`
+	PreCookies   []string       `json:"preCookies"` // name@domain
+	PostCookies  []string       `json:"postCookies,omitempty"`
+	Pre          probe          `json:"pre"`
+	Post         *probe         `json:"post,omitempty"`
 }
 
 func probeJS(cfg *config.Site) string {
@@ -187,7 +187,7 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 	if len(deniedPings) > 0 {
 		r1detail += fmt.Sprintf(" (+%d consent-mode denied pings, gcs=G100 — not leakage)", len(deniedPings))
 	}
-	checks = append(checks, report.New("R1", len(trackerHits) == 0, r1detail))
+	checks = append(checks, report.NewList("R1", len(trackerHits) == 0, r1detail, trackerHits))
 
 	// R2 — Consent Mode denied on every GA hit
 	var gaBad, gaAll []string
@@ -202,8 +202,8 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 	if len(gaAll) == 0 {
 		checks = append(checks, report.Skipped("R2", "no GA requests observed"))
 	} else {
-		checks = append(checks, report.New("R2", len(gaBad) == 0,
-			fmt.Sprintf("GA hits without gcs=G100: %d of %d %s", len(gaBad), len(gaAll), sample(gaBad))))
+		checks = append(checks, report.NewList("R2", len(gaBad) == 0,
+			fmt.Sprintf("GA hits without gcs=G100: %d of %d %s", len(gaBad), len(gaAll), sample(gaBad)), gaBad))
 	}
 
 	// R3 — the CMP itself must load (blocking everything incl. uc.js is also a
@@ -246,8 +246,8 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 			badCookies = append(badCookies, c.Name+"@"+c.Domain)
 		}
 	}
-	checks = append(checks, report.New("K1", len(badCookies) == 0,
-		fmt.Sprintf("non-allowlisted cookies pre-consent: %d %s", len(badCookies), sample(badCookies))))
+	checks = append(checks, report.NewList("K1", len(badCookies) == 0,
+		fmt.Sprintf("non-allowlisted cookies pre-consent: %d %s", len(badCookies), sample(badCookies)), badCookies))
 
 	return checks
 }
