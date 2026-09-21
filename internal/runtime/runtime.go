@@ -15,6 +15,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -168,6 +169,24 @@ func cookieNames(cookies []*network.Cookie) []string {
 	return out
 }
 
+// gaMeasurementRe matches a Google Analytics MEASUREMENT hit — the endpoints
+// that actually report a pageview and therefore carry the Consent Mode signal.
+// The library files (analytics.js, ga.js, gtag/js) are excluded: they have no
+// gcs parameter to carry, so judging them by one is meaningless.
+var gaMeasurementRe = regexp.MustCompile(`(?i)(google-analytics\.com|analytics\.google\.com)/[a-z0-9_/]*(collect|batch|measurement/conversion)`)
+
+// tagLoaderRe matches the container and library files a tag system downloads
+// before it decides anything: gtm.js, gtag/js, analytics.js, ga.js, fbevents.js.
+//
+// Fetching one of these is not leakage, for the same reason googletagmanager.com
+// is absent from TrackerHosts: under Consent Mode the library arrives with
+// storage denied and then behaves. What must be judged is what it SENDS (the
+// collect endpoints, which R1 still counts) and what it STORES (K1's jar, which
+// sees a cookie the instant it is written). Counting the download itself made
+// kurowski.pl — a site whose Google tags were correctly held — fail R1 on
+// `analytics.js`, while the same page's gtm.js was deliberately ignored.
+var tagLoaderRe = regexp.MustCompile(`(?i)/(gtm\.js|gtag/js|analytics\.js|ga\.js|fbevents\.js)(\?|$)`)
+
 func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) []report.Check {
 	var checks []report.Check
 
@@ -175,11 +194,14 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 	// Consent Mode v2 denied-state pings (cookieless by design) — Google tags
 	// send those on purpose when consent is denied, so they are not leakage;
 	// same semantics R2 applies to GA hits.
-	var trackerHits, deniedPings []string
+	var trackerHits, deniedPings, loaders []string
 	for _, r := range matching(res.PreRequests, cfg, true) {
-		if strings.Contains(r, "gcs=G100") {
+		switch {
+		case strings.Contains(r, "gcs=G100"):
 			deniedPings = append(deniedPings, r)
-		} else {
+		case tagLoaderRe.MatchString(r):
+			loaders = append(loaders, r)
+		default:
 			trackerHits = append(trackerHits, r)
 		}
 	}
@@ -187,12 +209,19 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 	if len(deniedPings) > 0 {
 		r1detail += fmt.Sprintf(" (+%d consent-mode denied pings, gcs=G100 — not leakage)", len(deniedPings))
 	}
+	if len(loaders) > 0 {
+		r1detail += fmt.Sprintf(" (+%d tag-library loads — judged by what they then send)", len(loaders))
+	}
 	checks = append(checks, report.NewList("R1", len(trackerHits) == 0, r1detail, trackerHits))
 
-	// R2 — Consent Mode denied on every GA hit
+	// R2 — Consent Mode denied on every GA MEASUREMENT hit. Only a collect
+	// endpoint can carry a consent signal; a library file never does. Matching
+	// any google-analytics.com URL scored `analytics.js` — a script download —
+	// as "a GA hit without a consent signal", and kurowski.pl (2026-09-21) read
+	// 1-of-2 bad while its only real measurement hit carried gcs=G100.
 	var gaBad, gaAll []string
 	for _, r := range res.PreRequests {
-		if strings.Contains(r, "google-analytics.com/") || strings.Contains(r, "analytics.google.com/") {
+		if gaMeasurementRe.MatchString(r) {
 			gaAll = append(gaAll, r)
 			if !strings.Contains(r, "gcs=G100") {
 				gaBad = append(gaBad, r)
@@ -236,13 +265,9 @@ func preConsentChecks(cfg *config.Site, res *Result, cookies []*network.Cookie) 
 			len(res.Pre.LiveEmbedIframes), sample(res.Pre.LiveEmbedIframes), res.Pre.GatedIframes, res.Pre.GatedScripts)))
 
 	// K1 — cookie jar ⊆ allowlist
-	allow := map[string]bool{}
-	for _, n := range cfg.CookieAllowlist {
-		allow[n] = true
-	}
 	var badCookies []string
 	for _, c := range cookies {
-		if !allow[c.Name] {
+		if !cfg.IsAllowedCookie(c.Name) {
 			badCookies = append(badCookies, c.Name+"@"+c.Domain)
 		}
 	}
