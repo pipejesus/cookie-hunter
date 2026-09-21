@@ -22,6 +22,7 @@ type Site struct {
 	UserAgent       string   `json:"userAgent,omitempty"`
 
 	trackerRe, embedRe, imageAllowRe *regexp.Regexp
+	trackerHostRe, trackerURLRe      *regexp.Regexp
 }
 
 func Defaults() *Site {
@@ -103,6 +104,64 @@ func (s *Site) TrackerRe() *regexp.Regexp {
 		s.trackerRe = regexp.MustCompile("(?i)" + strings.Join(s.TrackerHosts, "|"))
 	}
 	return s.trackerRe
+}
+
+// IsTracker reports whether a URL contacts a tracker, matching each pattern
+// against the part of the URL it actually names:
+//
+//   - a pattern with no "/" names a HOST and is tested against the host alone;
+//   - a pattern containing "/" (facebook\.com/tr, google\.com/maps) names a
+//     host and path, and is tested against the whole URL.
+//
+// TrackerRe tests the whole URL against everything, which is wrong for the bare
+// words in the default list: `tiktok` and `spotify` match a path as happily as
+// a host, so a studio's own article image at
+// /blog/tiktok-marketing-for-studios/cover.jpg was counted as a tracker request
+// (proved in runtime's truth_test.go, 2026-09-21). TrackerRe is kept for
+// callers that match attribute values rather than resolved URLs.
+func (s *Site) IsTracker(rawurl string) bool {
+	host, ok := hostOf(rawurl)
+	if !ok {
+		return false // data:, blob:, about: and relative refs contact nobody
+	}
+	if re := s.compileSplit(&s.trackerHostRe, false); re != nil && re.MatchString(host) {
+		return true
+	}
+	if re := s.compileSplit(&s.trackerURLRe, true); re != nil && re.MatchString(rawurl) {
+		return true
+	}
+	return false
+}
+
+// compileSplit builds (once) the half of TrackerHosts that carries a path
+// component, or the half that does not.
+func (s *Site) compileSplit(dst **regexp.Regexp, withPath bool) *regexp.Regexp {
+	if *dst != nil {
+		return *dst
+	}
+	var parts []string
+	for _, p := range s.TrackerHosts {
+		if strings.Contains(p, "/") == withPath {
+			parts = append(parts, p)
+		}
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	*dst = regexp.MustCompile("(?i)" + strings.Join(parts, "|"))
+	return *dst
+}
+
+// hostOf returns the lower-case host of an absolute http(s) URL.
+func hostOf(rawurl string) (string, bool) {
+	u, err := url.Parse(rawurl)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	if u.Scheme != "" && u.Scheme != "http" && u.Scheme != "https" {
+		return "", false
+	}
+	return strings.ToLower(u.Hostname()), true
 }
 
 func (s *Site) EmbedRe() *regexp.Regexp {
