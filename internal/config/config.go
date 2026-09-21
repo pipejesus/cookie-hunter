@@ -27,10 +27,34 @@ type Site struct {
 func Defaults() *Site {
 	return &Site{
 		Region: "com",
+		// The list grew out of embed-heavy media sites, so it covered players and
+		// ad exchanges but not the analytics and session-recording tags a small
+		// business site actually runs. aldent.lublin.pl (2026-09-21) loaded
+		// Microsoft Clarity — a session recorder, the most invasive thing on the
+		// page — and Bing UET before consent, and R1 did not name either: the
+		// check still failed on the Spotify pixel, so the verdict was right while
+		// the evidence handed to the client was missing its worst item.
+		//
+		// googletagmanager.com is deliberately ABSENT. Loading gtm.js ahead of
+		// consent is the documented Consent Mode design: the container arrives
+		// with storage denied and the tags inside it decide. Listing it would fail
+		// R1 on every correctly configured site. What must be judged is the tags
+		// the container then fires — which is exactly what these hosts catch.
 		TrackerHosts: []string{
+			// embeds & ad exchanges
 			`youtube\.com`, `ytimg`, `platform\.twitter`, `syndication\.(x|twitter)\.com`,
 			`tiktok`, `ttwstatic`, `tiktokcdn`, `spotify`, `ustat\.info`, `openstat\.eu`,
 			`doubleclick`, `googlesyndication`, `imasdk`, `onnetwork\.tv`,
+			`googleadservices\.com`,
+			// analytics & advertising tags
+			`google-analytics\.com`, `analytics\.google\.com`,
+			`connect\.facebook\.net`, `facebook\.com/tr`,
+			`bat\.bing\.`, `clarity\.ms`,
+			`snap\.licdn\.com`, `ads\.linkedin\.com`,
+			`mc\.yandex\.`, `ct\.pinterest\.com`,
+			// session recording / heatmaps
+			`hotjar\.(com|io)`, `smartlook\.com`, `fullstory\.com`,
+			`mouseflow\.com`, `luckyorange\.(com|net)`,
 		},
 		// Name the REGISTRABLE domain, not one subdomain: embeds move hosts freely
 		// (open. vs creators.spotify.com, player.vimeo.com vs vimeo.com). Pinning a
@@ -42,7 +66,7 @@ func Defaults() *Site {
 			`instagram\.com`, `tiktok\.com`, `spotify\.com`, `soundcloud\.com`,
 			`google\.com/maps`, `onnetwork\.tv`,
 		},
-		CookieAllowlist: []string{"CookieConsent"},
+		CookieAllowlist: knownEssentialCookies,
 		ImageAllowHosts: []string{`gravatar\.com`, `\.wp\.com`},
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
 			"(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",

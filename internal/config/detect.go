@@ -11,9 +11,28 @@ var (
 // Well-known session-essential cookies, safe pre-consent. Anything not on the
 // site's allowlist still fails K1 — extending the list is a reviewed human
 // decision, never automatic.
+//
+// A CMP's own consent record belongs here by definition: without it the banner
+// cannot remember a refusal and would have to ask again on every page. Carrying
+// only Cookiebot's `CookieConsent` made K1 report every other vendor's record
+// as a leak — on aldent.lublin.pl (2026-09-21) that was `cookieyes-consent`,
+// holding `consent:no`, i.e. the proof the visitor refused, counted as evidence
+// against the site.
 var knownEssentialCookies = []string{
-	"CookieConsent", "PHPSESSID", "laravel_session", "XSRF-TOKEN",
+	// sessions / CSRF
+	"PHPSESSID", "laravel_session", "XSRF-TOKEN",
 	"csrftoken", "JSESSIONID", "wordpress_test_cookie",
+	// CMP consent records
+	"CookieConsent", "CookieConsentBulkTicket", // Cookiebot
+	"cookieyes-consent", "viewed_cookie_policy", // CookieYes / GDPR Cookie Consent
+	"cmplz_banner-status", "cmplz_consented_services", // Complianz
+	"borlabs-cookie",                          // Borlabs
+	"real_cookie_banner",                      // Real Cookie Banner
+	"OptanonAlertBoxClosed", "OptanonConsent", // OneTrust
+	"euconsent-v2", "eupubconsent-v2", // IAB TCF
+	"moove_gdpr_popup",       // Moove GDPR
+	"cookie_notice_accepted", // Cookie Notice (dFactory)
+	"_iub_cs-s",              // Iubenda
 }
 
 // Detect extracts the mechanical parts of a site config from a page's raw
