@@ -255,3 +255,42 @@ func TestFreshProfilePerRun(t *testing.T) {
 	}
 	t.Logf("both runs arrived with an empty jar (%d navigations, each sent nothing)", len(received))
 }
+
+// A run that observed nothing is a FAILED run, not a clean site, and the two
+// are indistinguishable downstream: with no requests and an empty jar, R1 and
+// K1 both pass and the report reads "no tracking before consent".
+// lidomovementstudio.pl produced exactly that on 2026-09-22 — silently, with no
+// error — on a site that loads Hotjar and an autoplaying YouTube embed before
+// anyone consents. Telling a client he is compliant because the test failed is
+// the worst answer this tool can give.
+func TestBlockedPageIsAnErrorNotACleanPass(t *testing.T) {
+	if !chromeAvailable() {
+		t.Skip("no Chrome/Chromium on PATH")
+	}
+	for _, code := range []int{403, 503} {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(code)
+			fmt.Fprint(w, "blocked")
+		})
+		srv := httptest.NewServer(mux)
+
+		cfg := config.Defaults()
+		cfg.Domain = "127.0.0.1"
+		res, err := Scan(context.Background(), cfg, srv.URL, false)
+		srv.Close()
+
+		if err == nil {
+			var k1 report.Check
+			if res != nil {
+				k1 = byID(res.Checks)["K1"]
+			}
+			t.Errorf("HTTP %d returned no error; K1 = %s — a WAF block would be reported as a clean site", code, k1.Status)
+			continue
+		}
+		if !strings.Contains(err.Error(), "nothing was measured") {
+			t.Errorf("HTTP %d: error does not say the run measured nothing: %v", code, err)
+		}
+		t.Logf("HTTP %d -> %v", code, err)
+	}
+}
